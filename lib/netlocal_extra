@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Copyright © 2007-2018 ANSSI. All Rights Reserved.
+# Copyright 2008-2009 SGDN/DCSSI
+# Copyright 2010 SGDSN/ANSSI
+# Author: Vincent Strubel <clipos@ssi.gouv.fr>
+# Distributed under the terms of the GNU Lesser General Public License v2.1
+
+source "/lib/rc/net/config_extra"
+
+config_extra() {
+	config_rm_addr || return 1
+}
+
+startlo_extra() {
+	local jail
+	for jail in ${CLIP_JAILS}; do
+		net_veth_create "${jail}" || return 1
+	done
+}
+		

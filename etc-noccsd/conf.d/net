@@ -1,0 +1,11 @@
+IF_NUMBER=1
+USER_IF=0
+UPDATE_IF=0
+
+. /etc/conf.d/clip 
+
+if [[ -z "${CLIP_JAILS//*rm_b*/}" && ! -s /etc/admin/conf.d/netconf/rm_b/resolv.conf ]]; then
+	DHCP_RESOLV_CONF=/vservers/rm_b/admin_priv/etc.admin/resolv.conf
+else
+	DHCP_RESOLV_CONF=
+fi

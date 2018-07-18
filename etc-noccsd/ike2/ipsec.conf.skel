@@ -1,0 +1,186 @@
+# clip-noccsd ipsec.conf
+
+# Cf. documentation in the clip-noccsd GTW config.
+
+local subnet=""
+local updown=""
+
+cat >"${output_file}" <<EOF
+
+config setup
+	charondebug="dmn 1,mgr 1,ike 2,chd 1,job 1,cfg 2,knl 1,net 1,enc 1,lib 1,ccs 1"
+	uniqueids=replace
+	cachecrls=no
+	strictcrlpolicy=no
+	crlcheckinterval=0
+
+conn %default
+	keyexchange=ikev2
+	authby=rsasig
+	mobike=no
+	keylife=3h
+	ikelifetime=12h
+	rekeymargin=10m
+	left=${ETH0_ADDR}
+	dpdaction=restart
+	keyingtries=2
+	fragmentation=yes
+	esp=aes256-sha256-ecp384!
+	ike=aes256-sha256-ecp384!
+
+EOF
+
+if [[ -n "${RMH_GW}" ]] ; then
+	let "num=0"
+	subnet="leftsubnet=${RMH_ADDR}/32"
+	updown=""
+	if [[ "${RMH_ADDR}" == "virtual" ]]; then
+		subnet="leftsourceip=%config"
+		updown="leftupdown=/sbin/ipsec-updown"
+	fi
+	[ -n "${RMH_GW_CA}" ] && rightca="rightca=\"${RMH_GW_CA}\"" || rightca=""
+	[ -n "${RMH_GW_ID}" ] && rightid="rightid=\"${RMH_GW_ID}\"" || rightid="rightid=%any"
+
+	for addr in ${RMH_GW}; do
+		cat >>"${output_file}" <<EOF
+
+conn gw_rmh${num}
+	dpddelay=30s
+	${subnet}
+	leftcert=rmh.pem
+	right=${addr}
+	rightsubnet=0.0.0.0/0
+	${rightca}
+	${rightid}
+	auto=add
+	${updown}
+
+EOF
+		let "num+=1"
+	done
+	echo "gw_rmh" >> "${gw_list}"
+fi
+
+if [[ -n "${RMB_GW}" ]] ; then
+	let "num=0"
+	subnet="leftsubnet=${RMB_ADDR}/32"
+	updown=""
+	if [[ "${RMB_ADDR}" == "virtual" ]]; then
+		subnet="leftsourceip=%config"
+		updown="leftupdown=/sbin/ipsec-updown"
+	fi
+	[ -n "${RMB_GW_CA}" ] && rightca="rightca=\"${RMB_GW_CA}\"" || rightca=""
+	[ -n "${RMB_GW_ID}" ] && rightid="rightid=\"${RMB_GW_ID}\"" || rightid="rightid=%any"
+
+	local rightsub="$(echo ${RMB_NETWORKS} | sed -e 's/ /,/g')"
+	for addr in ${RMB_GW}; do
+		cat >>"${output_file}" <<EOF
+
+conn gw_rmb${num}
+	dpddelay=30s
+	${subnet}
+	leftcert=rmb.pem
+	right=${addr}
+	rightsubnet=${rightsub}
+	${rightca}
+	${rightid}
+	auto=add
+	${updown}
+
+EOF
+		let "num+=1"
+	done
+	echo "gw_rmb" >> "${gw_list}"
+fi
+
+if [[ -n "${UPDATE_GW}" ]] ; then
+	let "num=0"
+	subnet="leftsubnet=${UPDATE_ADDR}/32"
+	updown=""
+	if [[ "${UPDATE_ADDR}" == "virtual" ]]; then
+		subnet="leftsourceip=%config"
+		updown="leftupdown=/sbin/ipsec-updown"
+	fi
+	[ -n "${UPDATE_GW_CA}" ] && rightca="rightca=\"${UPDATE_GW_CA}\"" || rightca=""
+	[ -n "${UPDATE_GW_ID}" ] && rightid="rightid=\"${UPDATE_GW_ID}\"" || rightid="rightid=%any"
+
+	for addr in ${UPDATE_GW}; do
+		cat >>"${output_file}" <<EOF
+
+conn gw_update${num}
+	dpddelay=60s
+	${subnet}
+	leftcert=update.pem
+	right=${addr}
+	rightsubnet=0.0.0.0/0
+	${rightca}
+	${rightid}
+	auto=add
+
+EOF
+		let "num+=1"
+	done
+	echo "gw_update" >> "${gw_list}"
+fi
+
+if [[ -n "${ADMIN_GW}" && -n "${ADMIN_ADDR}" ]] ; then
+	let "num=0"
+	subnet="leftsubnet=${ADMIN_ADDR}/32"
+	updown=""
+	if [[ "${ADMIN_ADDR}" == "virtual" ]]; then
+		subnet="leftsourceip=%config"
+		updown="leftupdown=/sbin/ipsec-updown"
+	fi
+	[ -n "${ADMIN_GW_CA}" ] && rightca="rightca=\"${ADMIN_GW_CA}\"" || rightca=""
+	[ -n "${ADMIN_GW_ID}" ] && rightid="rightid=\"${ADMIN_GW_ID}\"" || rightid="rightid=%any"
+
+	for addr in ${ADMIN_GW}; do
+		cat >>"${output_file}" <<EOF
+
+conn gw_admin${num}
+	dpddelay=30s
+	${subnet}
+	leftcert=admin.pem
+	right=${addr}
+	rightsubnet=0.0.0.0/0
+	${rightca}
+	${rightid}
+	auto=add
+	${updown}
+
+EOF
+		let "num+=1"
+	done
+	echo "gw_admin" >> "${gw_list}"
+fi
+
+if [[ -n "${AUDIT_GW}" && -n "${AUDIT_ADDR}" ]] ; then
+	let "num=0"
+	subnet="leftsubnet=${AUDIT_ADDR}/32"
+	updown=""
+	if [[ "${AUDIT_ADDR}" == "virtual" ]]; then
+		subnet="leftsourceip=%config"
+		updown="leftupdown=/sbin/ipsec-updown"
+	fi
+	[ -n "${AUDIT_GW_CA}" ] && rightca="rightca=\"${AUDIT_GW_CA}\"" || rightca=""
+	[ -n "${AUDIT_GW_ID}" ] && rightid="rightid=\"${AUDIT_GW_ID}\"" || rightid="rightid=%any"
+
+	for addr in ${AUDIT_GW}; do
+		cat >>"${output_file}" <<EOF
+
+conn gw_audit${num}
+	dpddelay=30s
+	${subnet}
+	leftcert=audit.pem
+	right=${addr}
+	rightsubnet=0.0.0.0/0
+	${rightca}
+	${rightid}
+	auto=add
+	${updown}
+
+EOF
+		let "num+=1"
+	done
+	echo "gw_audit" >> "${gw_list}"
+fi

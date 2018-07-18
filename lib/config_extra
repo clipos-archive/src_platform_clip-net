@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Copyright © 2007-2018 ANSSI. All Rights Reserved.
+# Copyright 2009 SGDN/DCSSI
+# Copyright 2010-2014 SGDSN/ANSSI
+# Author: Vincent Strubel <clipos@ssi.gouv.fr>
+# Distributed under the terms of the GNU Lesser General Public License v2.1
+
+source "/etc/conf.d/clip"
+source "/etc/conf.d/jail-net"
+
+RMJAILS="$(echo "${CLIP_JAILS}" | tr '[a-z]' '[A-Z]' | sed -e 's/_//g')"
+
+EXTRA_IMPORT_ADDR=""
+EXTRA_IMPORT_MULTIPORT=""
+EXTRA_IMPORT_SAME=""
+EXTRA_IMPORT_GW=""
+EXTRA_IMPORT_ESP_CCSD=""
+EXTRA_IMPORT_IPSEC_REDUNDANCY=""
+
+for jail in ${RMJAILS}; do
+	export HAS_JAIL_${jail}="1"
+	EXTRA_IMPORT_ADDR="${EXTRA_IMPORT_ADDR} ${jail}_ADDR"
+	EXTRA_IMPORT_MULTIPORT="${EXTRA_IMPORT_MULTIPORT} ${jail}_OUT_TCP ${jail}_OUT_UDP"
+	EXTRA_IMPORT_SAME="${EXTRA_IMPORT_SAME} ${jail}_OUT_SAME_TCP ${jail}_OUT_SAME_UDP"
+	EXTRA_YESNO="${EXTRA_YESNO} ${jail}_OUT_FTP ${jail}_OUT_PING"
+	EXTRA_IMPORT_GW="${EXTRA_IMPORT_GW} ${jail}_GW"
+	EXTRA_IMPORT_ESP_CCSD="${EXTRA_IMPORT_ESP_CCSD} ${jail}_ESP_CCSD"
+	EXTRA_IMPORT_IPSEC_REDUNDANCY="${EXTRA_IMPORT_IPSEC_REDUNDANCY} ${jail}_REDUNDANCY"
+done
+
+config_rm_addr() {
+	import_conf_all "${NET_CONST_FILE}" "${_IMPORT_FILTER_ADDR}|virtual" ${EXTRA_IMPORT_ADDR}
+
+	EXTRA_LOCAL_ADDRS=""
+	local n var addr
+	for n in ${RMJAILS}; do
+		var="${n}_ADDR"
+		addr="${!var/virtual/}"
+		var="${n}_LOCAL_ADDR"
+		EXTRA_LOCAL_ADDRS="${EXTRA_LOCAL_ADDRS} ${addr} ${!var}"
+	done
+}
+
+

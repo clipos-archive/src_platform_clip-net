@@ -1,0 +1,110 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Copyright © 2007-2018 ANSSI. All Rights Reserved.
+# Copyright 2008-2009 SGDN/DCSSI
+# Copyright 2010-2013 SGDSN/ANSSI
+# Author: Vincent Strubel <clipos@ssi.gouv.fr>
+# Distributed under the terms of the GNU Lesser General Public License v2.1
+
+# eth0 is used for output only
+ETH0_OUT=y
+
+IPSEC_CONF=/etc/conf.d/ipsec
+
+netfilter_config_extra() {
+	import_conf_all "${NETFILTER_FILE}" "${MULTIPORT_IMPORT_FILTER}" \
+					${EXTRA_IMPORT_MULTIPORT} 2>/dev/null 
+	import_conf_all "${NETFILTER_FILE}" "${SAME_IMPORT_FILTER}" \
+					${EXTRA_IMPORT_SAME} 2>/dev/null 
+	import_conf_all "${NETFILTER_FILE}" "yes|no" ${EXTRA_YESNO} 2>/dev/null
+	import_conf_noerr "${IPSEC_CONF}" "yes|no" RMB_FORCE_IPSEC 2>/dev/null
+	
+	if [[ -z ${RMB_FORCE_IPSEC} ]]; then
+		RMB_FORCE_IPSEC="no"
+	fi
+
+	if [[ -n "${EXTRA_IMPORT_GW}" ]]; then
+		import_conf_all "${IPSEC_FILE}" \
+				"${ADDR_MULTI_FILTER}" ${EXTRA_IMPORT_GW} 2>/dev/null \
+			|| einfo "No RM gateways"
+		if [[ -n "${RMB_GW}" ]]; then
+			if ! import_conf_noerr "${IPSEC_FILE}" "${NET_MULTI_FILTER}" RMB_NETWORKS 2>/dev/null; then
+				RMB_NETWORKS="0.0.0.0/0"
+			fi
+		fi
+	fi
+}
+
+netfilter_init_extra() {
+	if [[ -n "${RMH_GW}" ]]; then
+		force_ipsec_forward "rmh1" "-" "${ETH0_ADDR}" "${RMH_GW}" \
+			|| return 1
+		pass_ipsec_if "eth0" "${ETH0_ADDR}" "${RMH_GW}" || return 1
+	fi
+
+	if [[ -n "${HAS_JAIL_RMB}" ]]; then
+		if [[ -n "${RMB_GW}" ]]; then
+			# force all the trafic to go through IPsec
+			if [[ "${RMB_NETWORKS}" == "0.0.0.0/0"  || "${RMB_FORCE_IPSEC}" == "yes" ]]; then
+				force_ipsec_forward "rmb1" "-" "${ETH0_ADDR}" "${RMB_GW}" \
+					|| return 1
+			else
+				force_ipsec_forward_dst "rmb1" "-" "${RMB_NETWORKS}" \
+					"${ETH0_ADDR}" "${RMB_GW}" \
+						|| return 1
+			fi
+			pass_ipsec_if "eth0" "${ETH0_ADDR}" "${RMB_GW}" || return 1
+		fi
+
+		if [[ "${RMB_NETWORKS}" != "0.0.0.0/0" && "${RMB_FORCE_IPSEC}" == "no" ]]; then
+			snat_cleartext_forward "rmb1" "eth0" "${ETH0_ADDR}" "0x1002" \
+				|| return 1
+		fi
+	fi
+}
+
+netfilter_local_extra() {
+	if [[ -n "${HAS_JAIL_RMH}" ]]; then
+		pass_local_unreachable "rmh1" || return 1
+	fi
+	if [[ -n "${HAS_JAIL_RMB}" ]]; then
+		pass_local_unreachable "rmb1" || return 1
+	fi
+}
+
+netfilter_start_extra() {
+	# RM_B
+	if [[ -n "${HAS_JAIL_RMB}" ]] ; then
+		# do not pass traffic when we IPsec is enforced and
+		# no IPsec gateway is configured
+		if [[ -n "${RMB_GW}" || "${RMB_FORCE_IPSEC}" == "no" ]]; then
+			declare -A PASS_ARGS
+			setup_pass_args_out "RMB"
+			[[ "${RMB_OUT_FTP}" == "yes" ]] && PASS_ARGS["out_ftp"]="1"
+			[[ "${RMB_OUT_PING}" == "yes" ]] && PASS_ARGS["out_ping"]="1"
+
+			pass_compartment_start "out" "rmb" 		\
+				|| return 1
+			unset PASS_ARGS
+			
+			pass_compartment_end "rmb1" "eth0" "rmb"	\
+				"forward" "-" "-" 			\
+				|| return 1
+		fi
+	fi
+
+	# RM_H
+	if [[ -n "${HAS_JAIL_RMH}" && -n "${RMH_GW}" ]]; then
+		declare -A PASS_ARGS
+		setup_pass_args_out "RMH"
+		[[ "${RMH_OUT_FTP}" == "yes" ]] && PASS_ARGS["out_ftp"]="1"
+		[[ "${RMH_OUT_PING}" == "yes" ]] && PASS_ARGS["out_ping"]="1"
+
+		pass_compartment_start "out" "rmh" 				\
+			|| return 1
+		unset PASS_ARGS
+		
+		pass_compartment_end "rmh1" "eth0"  "rmh"	\
+			"forward" "-" "-" 			\
+			|| return 1
+	fi
+}

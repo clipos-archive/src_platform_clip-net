@@ -1,0 +1,62 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# Copyright © 2007-2018 ANSSI. All Rights Reserved.
+# Copyright 2009 SGDN/DCSSI
+# Copyright 2010-2014 SGDSN/ANSSI
+# Author: Vincent Strubel <clipos@ssi.gouv.fr>
+# Distributed under the terms of the GNU Lesser General Public License v2.1
+
+source "/etc/conf.d/jail-net"
+source "/lib/rc/net/config_extra"
+
+check_extra() {
+	local conf="${1}"
+
+	local jail var jailname
+	for jail in ${CLIP_JAILS}; do
+		local jailname="$(echo "${jail}" | tr '[a-z]' '[A-Z]' | sed -e 's/_//g')"
+		if [[ "${jail}" != rm_b ]]; then
+			import_conf_noerr "${NET_CONST_FILE}" "${_IMPORT_FILTER_ADDR}|virtual" \
+				"${jailname}_ADDR" || return 1
+		fi
+		var="${jailname}_LOCAL_ADDR"
+		local laddr="${!var}"
+		var="${jailname}_ADDR"
+		local baddr="${!var/virtual/}"
+		if [[ -n "${baddr}" ]]; then
+			check_addrs "${jail}" "${laddr}" "${baddr}" || return 1
+		else
+			check_addrs "${jail}" "${laddr}" || return 1
+		fi
+	done
+}
+
+resolvconf_extra() {
+	local conf="${1}"
+	local hostname="$(hostname)"
+	local ret=0
+
+	local jail f
+
+	for jail in ${CLIP_JAILS} ; do
+		if [[ ! -f "${conf}/${jail}/hosts" ]]; then
+			local tmphost="$(mktemp /tmp/hosts.XXXXXX)"
+			echo "127.0.0.1 localhost" > "${tmphost}" || ret=1
+			mv "${tmphost}" "${conf}/${jail}/hosts" || ret=1
+			chown 4000:4000 "${conf}/${jail}/hosts" || ret=1
+		fi
+	done
+
+	for f in hosts resolv.conf proxy; do
+		for jail in ${CLIP_JAILS} ; do
+			if [[ -f "${conf}/${jail}/${f}" ]]; then
+				cp -pf "${conf}/${jail}/${f}" \
+				"/vservers/${jail}/admin_priv/etc.admin/${f}" \
+					|| ret=1
+			fi
+			grep -qw "${hostname}" "/vservers/${jail}/admin_priv/etc.admin/hosts" \
+				|| sed -i -e "s/localhost/localhost ${hostname}/" \
+					"/vservers/${jail}/admin_priv/etc.admin/hosts"
+		done
+	done
+	return $ret
+}
